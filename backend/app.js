@@ -19,7 +19,7 @@ const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 app.use(
   cors({
     origin: process.env.CLIENT_URL, // http://localhost:3000
-    credentials: true, // needed if you use cookies/session later
+    credentials: true, //  for cookies/session later
   })
 );
 
