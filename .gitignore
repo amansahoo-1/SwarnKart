@@ -16,3 +16,6 @@ backend/build/
 # OS + Editor files
 .DS_Store
 .vscode/
+
+
+dist/

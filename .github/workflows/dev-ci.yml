@@ -1,0 +1,54 @@
+name: CI for Monorepo - Frontend & Backend
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  backend:
+    name: 🛠️ Backend Build & Test
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Dependencies (Backend)
+        run: npm install
+
+      - name: Run Backend Tests
+        run: echo "✅ Add backend tests here later"
+
+  frontend:
+    name: 🎨 Frontend Build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Dependencies (Frontend)
+        run: npm install
+
+      - name: Build Frontend (EJS if any assets need compiling)
+        run: echo "✅ Add EJS/Tailwind build steps here if needed"
