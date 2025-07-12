@@ -33,7 +33,8 @@ cp .env.example .env
 ## Start backend
 
 cd SwarnKart/backend
-nodemon app.js
+
+npm run dev
 
 ## Start frontend
 
