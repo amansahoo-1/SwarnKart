@@ -7,7 +7,183 @@ datasource db {
   provider     = "postgresql"
   url          = env("DATABASE_URL")
   directUrl    = env("DIRECT_DATABASE_URL")
-  relationMode = "prisma"
+  relationMode = "foreignKeys"
+}
+
+model Admin {
+  id            Int            @id @default(autoincrement())
+  name          String
+  email         String         @unique
+  password      String
+  phoneNumber   String?
+  avatarUrl     String?
+  role          Role           @default(SUPERADMIN)
+  status        Status         @default(ACTIVE)
+  lastLoginAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  customers     User[]         @relation("AdminUsers")
+  products      Product[]
+  orders        Order[]
+  inquiries     Inquiry[]
+  inventoryLogs InventoryLog[]
+  reports       Report[]
+  settings      Setting[]
+  invoices      Invoice[]
+}
+
+model User {
+  id          Int        @id @default(autoincrement())
+  name        String
+  email       String     @unique
+  password    String
+  phone       String?
+  avatarUrl   String?
+  address     String?
+  preferences Json?
+  createdAt   DateTime   @default(now())
+  adminId     Int?
+  admin       Admin?     @relation("AdminUsers", fields: [adminId], references: [id])
+  orders      Order[]
+  cart        Cart?
+  reviews     Review[]
+  wishlist    Wishlist?
+  discounts   Discount[]
+}
+
+model Discount {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique
+  percentage Float
+  validTill  DateTime
+  createdAt  DateTime @default(now())
+  users      User[]
+  orders     Order[]
+}
+
+model Product {
+  id          Int         @id @default(autoincrement())
+  name        String
+  price       Float
+  description String?
+  imageUrl    String?
+  createdById Int
+  createdAt   DateTime    @default(now())
+  createdBy   Admin       @relation(fields: [createdById], references: [id])
+  orderItems  OrderItem[]
+  reviews     Review[]
+  wishlists   Wishlist[]
+  cartItems   CartItem[]
+}
+
+model Order {
+  id         Int         @id @default(autoincrement())
+  status     String
+  userId     Int
+  adminId    Int?
+  discountId Int?
+  createdAt  DateTime    @default(now())
+  user       User        @relation(fields: [userId], references: [id])
+  assignedTo Admin?      @relation(fields: [adminId], references: [id])
+  discount   Discount?   @relation(fields: [discountId], references: [id])
+  items      OrderItem[]
+}
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  quantity  Int
+  price     Float
+  order     Order   @relation(fields: [orderId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @unique
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+}
+
+model CartItem {
+  id        Int     @id @default(autoincrement())
+  cartId    Int
+  productId Int
+  quantity  Int
+  cart      Cart    @relation(fields: [cartId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model Wishlist {
+  id       Int       @id @default(autoincrement())
+  userId   Int       @unique
+  user     User      @relation(fields: [userId], references: [id])
+  products Product[]
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  productId Int
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model Inquiry {
+  id         Int      @id @default(autoincrement())
+  message    String
+  adminId    Int?
+  createdAt  DateTime @default(now())
+  assignedTo Admin?   @relation(fields: [adminId], references: [id])
+}
+
+model InventoryLog {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  change    Int
+  reason    String
+  adminId   Int
+  createdAt DateTime @default(now())
+  admin     Admin    @relation(fields: [adminId], references: [id])
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  title       String
+  adminId     Int
+  createdAt   DateTime @default(now())
+  generatedBy Admin    @relation(fields: [adminId], references: [id])
+}
+
+model Setting {
+  id      Int    @id @default(autoincrement())
+  key     String
+  value   String
+  adminId Int?
+  admin   Admin? @relation(fields: [adminId], references: [id])
+}
+
+model Invoice {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  pdfUrl      String
+  adminId     Int
+  createdAt   DateTime @default(now())
+  generatedBy Admin    @relation(fields: [adminId], references: [id])
+}
+
+model WishlistToProduct {
+  A Int
+  B Int
+
+  @@unique([A, B], map: "_WishlistToProduct_AB_unique")
+  @@index([B], map: "_WishlistToProduct_B_index")
+  @@map("_WishlistToProduct")
 }
 
 enum Role {
@@ -20,185 +196,4 @@ enum Status {
   ACTIVE
   SUSPENDED
   DELETED
-}
-
-model Admin {
-  id          Int       @id @default(autoincrement())
-  name        String
-  email       String    @unique
-  password    String
-  phoneNumber String?
-  avatarUrl   String?
-  role        Role      @default(SUPERADMIN)
-  status      Status    @default(ACTIVE)
-  lastLoginAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  // ✅ Only one definition for customers
-  customers User[] @relation("AdminUsers")
-
-  // Relations
-  products      Product[]
-  orders        Order[]
-  inquiries     Inquiry[]
-  inventoryLogs InventoryLog[]
-  reports       Report[]
-  settings      Setting[]
-  invoices      Invoice[]
-}
-
-model User {
-  id          Int      @id @default(autoincrement())
-  name        String
-  email       String   @unique
-  password    String
-  phone       String?
-  avatarUrl   String?
-  address     String?
-  preferences Json?
-  createdAt   DateTime @default(now())
-  adminId     Int?
-  admin       Admin?   @relation("AdminUsers", fields: [adminId], references: [id])
-
-  // Relations
-  orders    Order[]
-  cart      Cart?
-  reviews   Review[]
-  wishlist  Wishlist?
-  discounts Discount[]
-}
-
-model Discount {
-  id         Int      @id @default(autoincrement())
-  code       String   @unique
-  percentage Float
-  validTill  DateTime
-  createdAt  DateTime @default(now())
-
-  // Relations
-  users  User[]
-  orders Order[]
-}
-
-
-model Product {
-  id          Int      @id @default(autoincrement())
-  name        String
-  price       Float
-  description String?
-  imageUrl    String?
-  createdBy   Admin    @relation(fields: [createdById], references: [id])
-  createdById Int
-  createdAt   DateTime @default(now())
-
-  // Relations
-  orderItems OrderItem[]
-  reviews    Review[]
-  wishlists  Wishlist[]
-  cartItems  CartItem[]
-}
-
-model Order {
-  id         Int       @id @default(autoincrement())
-  status     String
-  user       User      @relation(fields: [userId], references: [id])
-  userId     Int
-  assignedTo Admin?    @relation(fields: [adminId], references: [id])
-  adminId    Int?
-  discount   Discount? @relation(fields: [discountId], references: [id])
-  discountId Int?
-  createdAt  DateTime  @default(now())
-
-  // Relations
-  items OrderItem[]
-}
-
-model OrderItem {
-  id        Int     @id @default(autoincrement())
-  order     Order   @relation(fields: [orderId], references: [id])
-  orderId   Int
-  product   Product @relation(fields: [productId], references: [id])
-  productId Int
-  quantity  Int
-  price     Float
-}
-
-model Cart {
-  id        Int        @id @default(autoincrement())
-  user      User       @relation(fields: [userId], references: [id])
-  userId    Int        @unique
-  items     CartItem[]
-  updatedAt DateTime   @updatedAt
-}
-
-model CartItem {
-  id        Int     @id @default(autoincrement())
-  cart      Cart    @relation(fields: [cartId], references: [id])
-  cartId    Int
-  product   Product @relation(fields: [productId], references: [id])
-  productId Int
-  quantity  Int
-}
-
-model Wishlist {
-  id       Int       @id @default(autoincrement())
-  user     User      @relation(fields: [userId], references: [id])
-  userId   Int       @unique
-  products Product[]
-}
-
-model Review {
-  id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    Int
-  product   Product  @relation(fields: [productId], references: [id])
-  productId Int
-  rating    Int
-  comment   String?
-  createdAt DateTime @default(now())
-}
-
-
-model Inquiry {
-  id         Int      @id @default(autoincrement())
-  message    String
-  assignedTo Admin?   @relation(fields: [adminId], references: [id])
-  adminId    Int?
-  createdAt  DateTime @default(now())
-}
-
-model InventoryLog {
-  id        Int      @id @default(autoincrement())
-  productId Int
-  change    Int
-  reason    String
-  admin     Admin    @relation(fields: [adminId], references: [id])
-  adminId   Int
-  createdAt DateTime @default(now())
-}
-
-model Report {
-  id          Int      @id @default(autoincrement())
-  title       String
-  generatedBy Admin    @relation(fields: [adminId], references: [id])
-  adminId     Int
-  createdAt   DateTime @default(now())
-}
-
-model Setting {
-  id      Int    @id @default(autoincrement())
-  key     String
-  value   String
-  admin   Admin? @relation(fields: [adminId], references: [id])
-  adminId Int?
-}
-
-model Invoice {
-  id          Int      @id @default(autoincrement())
-  orderId     Int
-  pdfUrl      String
-  generatedBy Admin    @relation(fields: [adminId], references: [id])
-  adminId     Int
-  createdAt   DateTime @default(now())
 }

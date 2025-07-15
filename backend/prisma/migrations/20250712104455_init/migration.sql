@@ -29,10 +29,13 @@ CREATE TABLE "User" (
     "avatarUrl" TEXT,
     "address" TEXT,
     "preferences" JSONB,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "adminId" INTEGER,
+    FOREIGN KEY ("adminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
 
 -- Discount
 CREATE TABLE "Discount" (
