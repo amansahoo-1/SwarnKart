@@ -36,7 +36,6 @@ CREATE TABLE "User" (
 
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
-
 -- Discount
 CREATE TABLE "Discount" (
     "id" SERIAL PRIMARY KEY,
