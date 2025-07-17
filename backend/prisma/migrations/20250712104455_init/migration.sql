@@ -119,16 +119,19 @@ CREATE TABLE "Wishlist" (
     FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
--- Wishlist-Product Join Table
-CREATE TABLE "_WishlistToProduct" (
-    "A" INTEGER NOT NULL,
-    "B" INTEGER NOT NULL,
-    FOREIGN KEY ("A") REFERENCES "Wishlist"("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY ("B") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE
+-- WishlistItem (Explicit Join Table)
+CREATE TABLE "WishlistItem" (
+    "id" SERIAL PRIMARY KEY,
+    "wishlistId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
+    "addedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY ("wishlistId") REFERENCES "Wishlist"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    UNIQUE ("wishlistId", "productId")
 );
 
-CREATE UNIQUE INDEX "_WishlistToProduct_AB_unique" ON "_WishlistToProduct"("A", "B");
-CREATE INDEX "_WishlistToProduct_B_index" ON "_WishlistToProduct"("B");
+CREATE INDEX "WishlistItem_productId_index" ON "WishlistItem"("productId");
+
 
 -- Review
 CREATE TABLE "Review" (
