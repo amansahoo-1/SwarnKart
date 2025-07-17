@@ -9,7 +9,7 @@
     "pnpm": ">=8.0.0"
   },
   "scripts": {
-    "dev": "cross-env NODE_ENV=development nodemon --watch src -r dotenv/config server.js",
+    "dev": "cross-env NODE_ENV=development nodemon --watch . -r dotenv/config server.js",
     "build": "rimraf dist && babel src --out-dir dist --extensions \".js\" --source-maps",
     "start": "cross-env NODE_ENV=production node -r dotenv/config server.js",
     "start:dev": "cross-env NODE_ENV=development node -r dotenv/config server.js",
@@ -82,9 +82,8 @@
       "<rootDir>/tests/setup.js"
     ],
     "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/src/$1",
-      "^@config/(.*)$": "<rootDir>/src/config/$1",
-      "^@utils/(.*)$": "<rootDir>/src/utils/$1"
+      "^@/(.*)$": "<rootDir>/$1",
+      "^@config/(.*)$": "<rootDir/config/$1"
     },
     "coveragePathIgnorePatterns": [
       "/node_modules/",

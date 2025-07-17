@@ -1,5 +1,5 @@
 // userControllers.js
-import prisma from "../client/prismaClient";
+import prisma from "../client/prismaClient.js";
 
 // Utility function for validating IDs
 const validateId = (id) => {

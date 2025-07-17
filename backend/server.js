@@ -1,5 +1,5 @@
 import app from "./app.js";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "./generated/prisma/index.js";
 import { ensureConnection } from "./client/prismaClient.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
