@@ -1,6 +1,5 @@
-/**
- * Error handling middleware for Express
- */
+import { Prisma } from "../generated/prisma/index.js";
+
 export const errorHandler = (err, req, res, next) => {
   console.error("🔥 Error:", err);
 

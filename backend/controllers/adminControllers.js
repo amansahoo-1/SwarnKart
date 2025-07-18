@@ -1,5 +1,6 @@
 // controllers/adminController.js
 import prisma from "../client/prismaClient.js";
+import { Role, Status } from "../generated/prisma/index.js";
 
 export const getAdmins = async (req, res, next) => {
   try {
