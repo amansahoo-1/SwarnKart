@@ -103,7 +103,6 @@ export const createAdmin = async (req, res, next) => {
 export const updateAdmin = async (req, res, next) => {
   try {
     const adminId = Number(req.params.adminId);
-    const { name, email, phoneNumber, avatarUrl, role, status } = req.body;
 
     if (isNaN(adminId)) {
       return res.status(400).json({
@@ -112,6 +111,18 @@ export const updateAdmin = async (req, res, next) => {
       });
     }
 
+    // ✅ Check if req.body exists
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Request body is missing or empty",
+      });
+    }
+
+    // Destructure after confirming req.body exists
+    const { name, email, phoneNumber, avatarUrl, role, status } = req.body;
+
+    // Optional: validate enum values
     if (role && !Object.values(Role).includes(role)) {
       return res.status(400).json({
         status: "fail",
