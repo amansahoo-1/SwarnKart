@@ -22,14 +22,14 @@ model Admin {
   lastLoginAt   DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  customers     User[]         @relation("AdminUsers")
-  products      Product[]
-  orders        Order[]
   inquiries     Inquiry[]
   inventoryLogs InventoryLog[]
+  invoices      Invoice[]
+  orders        Order[]
+  products      Product[]
   reports       Report[]
   settings      Setting[]
-  invoices      Invoice[]
+  customers     User[]         @relation("AdminUsers")
 }
 
 model User {
@@ -43,12 +43,12 @@ model User {
   preferences Json?
   createdAt   DateTime   @default(now())
   adminId     Int?
-  admin       Admin?     @relation("AdminUsers", fields: [adminId], references: [id])
-  orders      Order[]
   cart        Cart?
+  orders      Order[]
   reviews     Review[]
+  admin       Admin?     @relation("AdminUsers", fields: [adminId], references: [id])
   wishlist    Wishlist?
-  discounts   Discount[]
+  discounts   Discount[] @relation("DiscountToUser")
 }
 
 model Discount {
@@ -57,23 +57,25 @@ model Discount {
   percentage Float
   validTill  DateTime
   createdAt  DateTime @default(now())
-  users      User[]
   orders     Order[]
+  users      User[]   @relation("DiscountToUser")
 }
 
 model Product {
-  id          Int         @id @default(autoincrement())
-  name        String
-  price       Float
-  description String?
-  imageUrl    String?
-  createdById Int
-  createdAt   DateTime    @default(now())
-  createdBy   Admin       @relation(fields: [createdById], references: [id])
-  orderItems  OrderItem[]
-  reviews     Review[]
-  wishlists   Wishlist[]
-  cartItems   CartItem[]
+  id                Int                 @id @default(autoincrement())
+  name              String
+  price             Float
+  description       String?
+  imageUrl          String?
+  createdById       Int
+  createdAt         DateTime            @default(now())
+  cartItems         CartItem[]
+  InventoryLog      InventoryLog[]
+  orderItems        OrderItem[]
+  createdBy         Admin               @relation(fields: [createdById], references: [id])
+  reviews           Review[]
+  wishlistItems WishlistItem[]
+
 }
 
 model Order {
@@ -83,9 +85,10 @@ model Order {
   adminId    Int?
   discountId Int?
   createdAt  DateTime    @default(now())
-  user       User        @relation(fields: [userId], references: [id])
+  Invoice    Invoice[]
   assignedTo Admin?      @relation(fields: [adminId], references: [id])
   discount   Discount?   @relation(fields: [discountId], references: [id])
+  user       User        @relation(fields: [userId], references: [id])
   items      OrderItem[]
 }
 
@@ -95,15 +98,15 @@ model OrderItem {
   productId Int
   quantity  Int
   price     Float
-  order     Order   @relation(fields: [orderId], references: [id])
-  product   Product @relation(fields: [productId], references: [id])
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 model Cart {
   id        Int        @id @default(autoincrement())
   userId    Int        @unique
   updatedAt DateTime   @updatedAt
-  user      User       @relation(fields: [userId], references: [id])
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     CartItem[]
 }
 
@@ -112,16 +115,31 @@ model CartItem {
   cartId    Int
   productId Int
   quantity  Int
-  cart      Cart    @relation(fields: [cartId], references: [id])
-  product   Product @relation(fields: [productId], references: [id])
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 model Wishlist {
-  id       Int       @id @default(autoincrement())
-  userId   Int       @unique
-  user     User      @relation(fields: [userId], references: [id])
-  products Product[]
+  id                Int                 @id @default(autoincrement())
+  userId            Int                 @unique
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wishlistItems     WishlistItem[]
 }
+
+model WishlistItem {
+  id         Int      @id @default(autoincrement())
+  wishlistId Int
+  productId  Int
+  addedAt    DateTime @default(now())
+
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([wishlistId, productId]) // prevent duplicate entries
+  @@index([productId])
+}
+
+
 
 model Review {
   id        Int      @id @default(autoincrement())
@@ -130,8 +148,8 @@ model Review {
   rating    Int
   comment   String?
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Inquiry {
@@ -149,7 +167,8 @@ model InventoryLog {
   reason    String
   adminId   Int
   createdAt DateTime @default(now())
-  admin     Admin    @relation(fields: [adminId], references: [id])
+  admin     Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  Product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 model Report {
@@ -157,7 +176,7 @@ model Report {
   title       String
   adminId     Int
   createdAt   DateTime @default(now())
-  generatedBy Admin    @relation(fields: [adminId], references: [id])
+  generatedBy Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
 }
 
 model Setting {
@@ -174,16 +193,8 @@ model Invoice {
   pdfUrl      String
   adminId     Int
   createdAt   DateTime @default(now())
-  generatedBy Admin    @relation(fields: [adminId], references: [id])
-}
-
-model WishlistToProduct {
-  A Int
-  B Int
-
-  @@unique([A, B], map: "_WishlistToProduct_AB_unique")
-  @@index([B], map: "_WishlistToProduct_B_index")
-  @@map("_WishlistToProduct")
+  generatedBy Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  Order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 enum Role {
