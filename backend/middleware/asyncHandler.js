@@ -1,3 +1,5 @@
+import { ZodError } from "zod";
+import { Prisma } from "../generated/prisma/index.js";
 /**
  * Wraps an async route handler to properly catch errors
  * @param fn The async route handler to wrap

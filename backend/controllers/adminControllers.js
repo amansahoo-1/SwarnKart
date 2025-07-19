@@ -1,22 +1,64 @@
-// controllers/adminController.js
+// backend/controllers/adminController.js
 import prisma from "../client/prismaClient.js";
 import { Role, Status } from "../generated/prisma/index.js";
+import {
+  adminCreateSchema,
+  adminUpdateSchema,
+  adminIdParamSchema,
+} from "../validations/admin.validation.js";
+import { paginationSchema } from "../validations/common.validation.js";
 
 export const getAdmins = async (req, res, next) => {
   try {
-    const admins = await prisma.admin.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phoneNumber: true,
-        role: true,
-        status: true,
-        lastLoginAt: true,
-        createdAt: true,
+    const {
+      page = 1,
+      limit = 10,
+      sort,
+      order,
+    } = paginationSchema.parse(req.query);
+
+    const skip = (page - 1) * limit;
+
+    const [admins, total] = await Promise.all([
+      prisma.admin.findMany({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phoneNumber: true,
+          role: true,
+          status: true,
+          lastLoginAt: true,
+          createdAt: true,
+        },
+        skip,
+        take: limit,
+        orderBy: sort ? { [sort]: order || "asc" } : { createdAt: "desc" },
+        where: {
+          status: {
+            not: Status.DELETED,
+          },
+        },
+      }),
+      prisma.admin.count({
+        where: {
+          status: {
+            not: Status.DELETED,
+          },
+        },
+      }),
+    ]);
+
+    res.json({
+      status: "success",
+      data: admins,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
     });
-    res.json({ status: "success", data: admins });
   } catch (error) {
     next(error);
   }
@@ -24,14 +66,7 @@ export const getAdmins = async (req, res, next) => {
 
 export const getAdmin = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
-
-    if (isNaN(adminId)) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Invalid admin ID",
-      });
-    }
+    const { adminId } = adminIdParamSchema.parse(req.params);
 
     const admin = await prisma.admin.findUnique({
       where: { id: adminId },
@@ -49,9 +84,14 @@ export const getAdmin = async (req, res, next) => {
       },
     });
 
-    admin
-      ? res.json({ status: "success", data: admin })
-      : res.status(404).json({ status: "fail", message: "Admin not found" });
+    if (!admin || admin.status === Status.DELETED) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Admin not found",
+      });
+    }
+
+    res.json({ status: "success", data: admin });
   } catch (error) {
     next(error);
   }
@@ -59,29 +99,24 @@ export const getAdmin = async (req, res, next) => {
 
 export const createAdmin = async (req, res, next) => {
   try {
-    const { name, email, password, phoneNumber, role } = req.body;
+    const validatedData = adminCreateSchema.parse(req.body);
 
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Missing required fields (name, email, password)",
-      });
-    }
+    // Check if email already exists
+    const existingAdmin = await prisma.admin.findUnique({
+      where: { email: validatedData.email },
+    });
 
-    if (role && !Object.values(Role).includes(role)) {
-      return res.status(400).json({
+    if (existingAdmin) {
+      return res.status(409).json({
         status: "fail",
-        message: "Invalid role",
+        message: "Email already in use",
       });
     }
 
     const newAdmin = await prisma.admin.create({
       data: {
-        name,
-        email,
-        password,
-        phoneNumber,
-        role: role || Role.SUPERADMIN,
+        ...validatedData,
+        role: validatedData.role || Role.SUPERADMIN,
       },
       select: {
         id: true,
@@ -102,50 +137,39 @@ export const createAdmin = async (req, res, next) => {
 
 export const updateAdmin = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
+    const { adminId } = adminIdParamSchema.parse(req.params);
+    const validatedData = adminUpdateSchema.parse(req.body);
 
-    if (isNaN(adminId)) {
-      return res.status(400).json({
+    // Check if admin exists and is not deleted
+    const existingAdmin = await prisma.admin.findUnique({
+      where: { id: adminId },
+    });
+
+    if (!existingAdmin || existingAdmin.status === Status.DELETED) {
+      return res.status(404).json({
         status: "fail",
-        message: "Invalid admin ID",
+        message: "Admin not found",
       });
     }
 
-    // ✅ Check if req.body exists
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Request body is missing or empty",
+    // Check if email is being updated to an existing one
+    if (validatedData.email && validatedData.email !== existingAdmin.email) {
+      const emailExists = await prisma.admin.findUnique({
+        where: { email: validatedData.email },
       });
-    }
 
-    // Destructure after confirming req.body exists
-    const { name, email, phoneNumber, avatarUrl, role, status } = req.body;
-
-    // Optional: validate enum values
-    if (role && !Object.values(Role).includes(role)) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Invalid role",
-      });
-    }
-
-    if (status && !Object.values(Status).includes(status)) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Invalid status",
-      });
+      if (emailExists) {
+        return res.status(409).json({
+          status: "fail",
+          message: "Email already in use",
+        });
+      }
     }
 
     const updatedAdmin = await prisma.admin.update({
       where: { id: adminId },
       data: {
-        name,
-        email,
-        phoneNumber,
-        avatarUrl,
-        role,
-        status,
+        ...validatedData,
         updatedAt: new Date(),
       },
       select: {
@@ -168,12 +192,17 @@ export const updateAdmin = async (req, res, next) => {
 
 export const deleteAdmin = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
+    const { adminId } = adminIdParamSchema.parse(req.params);
 
-    if (isNaN(adminId)) {
-      return res.status(400).json({
+    // Check if admin exists
+    const existingAdmin = await prisma.admin.findUnique({
+      where: { id: adminId },
+    });
+
+    if (!existingAdmin || existingAdmin.status === Status.DELETED) {
+      return res.status(404).json({
         status: "fail",
-        message: "Invalid admin ID",
+        message: "Admin not found",
       });
     }
 
@@ -193,27 +222,38 @@ export const deleteAdmin = async (req, res, next) => {
 
 export const getAdminUsers = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
+    const { adminId } = adminIdParamSchema.parse(req.params);
+    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
 
-    if (isNaN(adminId)) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Invalid admin ID",
-      });
-    }
+    const skip = (page - 1) * limit;
 
-    const users = await prisma.user.findMany({
-      where: { adminId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        createdAt: true,
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where: { adminId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          createdAt: true,
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.user.count({ where: { adminId } }),
+    ]);
+
+    res.json({
+      status: "success",
+      data: users,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
     });
-
-    res.json({ status: "success", data: users });
   } catch (error) {
     next(error);
   }
@@ -221,28 +261,39 @@ export const getAdminUsers = async (req, res, next) => {
 
 export const getAdminProducts = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
+    const { adminId } = adminIdParamSchema.parse(req.params);
+    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
 
-    if (isNaN(adminId)) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Invalid admin ID",
-      });
-    }
+    const skip = (page - 1) * limit;
 
-    const products = await prisma.product.findMany({
-      where: { createdById: adminId },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        description: true,
-        imageUrl: true,
-        createdAt: true,
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where: { createdById: adminId },
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          description: true,
+          imageUrl: true,
+          createdAt: true,
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.product.count({ where: { createdById: adminId } }),
+    ]);
+
+    res.json({
+      status: "success",
+      data: products,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
     });
-
-    res.json({ status: "success", data: products });
   } catch (error) {
     next(error);
   }
@@ -250,14 +301,12 @@ export const getAdminProducts = async (req, res, next) => {
 
 export const getAdminInventoryLogs = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
-    if (isNaN(adminId)) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Invalid admin ID format",
-      });
-    }
+    const { adminId } = adminIdParamSchema.parse(req.params);
+    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
 
+    const skip = (page - 1) * limit;
+
+    // Check if admin exists
     const adminExists = await prisma.admin.findUnique({
       where: { id: adminId },
       select: { id: true },
@@ -270,32 +319,43 @@ export const getAdminInventoryLogs = async (req, res, next) => {
       });
     }
 
-    const logs = await prisma.inventoryLog.findMany({
-      where: { adminId },
-      include: {
-        Product: {
-          select: {
-            id: true,
-            name: true,
-            price: true,
-            imageUrl: true,
+    const [logs, total] = await Promise.all([
+      prisma.inventoryLog.findMany({
+        where: { adminId },
+        include: {
+          Product: {
+            select: {
+              id: true,
+              name: true,
+              price: true,
+              imageUrl: true,
+            },
+          },
+          admin: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
         },
-        admin: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.inventoryLog.count({ where: { adminId } }),
+    ]);
 
     res.status(200).json({
       status: "success",
       results: logs.length,
       data: logs,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     next(error);
@@ -304,17 +364,31 @@ export const getAdminInventoryLogs = async (req, res, next) => {
 
 export const getAdminReports = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
-    if (isNaN(adminId))
-      return res
-        .status(400)
-        .json({ status: "fail", message: "Invalid admin ID" });
+    const { adminId } = adminIdParamSchema.parse(req.params);
+    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
 
-    const reports = await prisma.report.findMany({
-      where: { adminId },
-      orderBy: { createdAt: "desc" },
+    const skip = (page - 1) * limit;
+
+    const [reports, total] = await Promise.all([
+      prisma.report.findMany({
+        where: { adminId },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.report.count({ where: { adminId } }),
+    ]);
+
+    res.json({
+      status: "success",
+      data: reports,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     });
-    res.json({ status: "success", data: reports });
   } catch (error) {
     next(error);
   }
@@ -322,25 +396,39 @@ export const getAdminReports = async (req, res, next) => {
 
 export const getAdminInvoices = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
-    if (isNaN(adminId))
-      return res
-        .status(400)
-        .json({ status: "fail", message: "Invalid admin ID" });
+    const { adminId } = adminIdParamSchema.parse(req.params);
+    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
 
-    const invoices = await prisma.invoice.findMany({
-      where: { adminId },
-      include: {
-        Order: {
-          select: {
-            id: true,
-            status: true,
+    const skip = (page - 1) * limit;
+
+    const [invoices, total] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { adminId },
+        include: {
+          Order: {
+            select: {
+              id: true,
+              status: true,
+            },
           },
         },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.invoice.count({ where: { adminId } }),
+    ]);
+
+    res.json({
+      status: "success",
+      data: invoices,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: { createdAt: "desc" },
     });
-    res.json({ status: "success", data: invoices });
   } catch (error) {
     next(error);
   }
@@ -348,17 +436,31 @@ export const getAdminInvoices = async (req, res, next) => {
 
 export const getAdminInquiries = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
-    if (isNaN(adminId))
-      return res
-        .status(400)
-        .json({ status: "fail", message: "Invalid admin ID" });
+    const { adminId } = adminIdParamSchema.parse(req.params);
+    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
 
-    const inquiries = await prisma.inquiry.findMany({
-      where: { adminId },
-      orderBy: { createdAt: "desc" },
+    const skip = (page - 1) * limit;
+
+    const [inquiries, total] = await Promise.all([
+      prisma.inquiry.findMany({
+        where: { adminId },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.inquiry.count({ where: { adminId } }),
+    ]);
+
+    res.json({
+      status: "success",
+      data: inquiries,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     });
-    res.json({ status: "success", data: inquiries });
   } catch (error) {
     next(error);
   }
@@ -366,16 +468,16 @@ export const getAdminInquiries = async (req, res, next) => {
 
 export const getAdminSettings = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
-    if (isNaN(adminId))
-      return res
-        .status(400)
-        .json({ status: "fail", message: "Invalid admin ID" });
+    const { adminId } = adminIdParamSchema.parse(req.params);
 
     const settings = await prisma.setting.findMany({
       where: { adminId },
     });
-    res.json({ status: "success", data: settings });
+
+    res.json({
+      status: "success",
+      data: settings,
+    });
   } catch (error) {
     next(error);
   }
@@ -383,14 +485,12 @@ export const getAdminSettings = async (req, res, next) => {
 
 export const getAdminOrders = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
-    if (isNaN(adminId)) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Invalid admin ID format",
-      });
-    }
+    const { adminId } = adminIdParamSchema.parse(req.params);
+    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
 
+    const skip = (page - 1) * limit;
+
+    // Check if admin exists
     const adminExists = await prisma.admin.findUnique({
       where: { id: adminId },
       select: { id: true },
@@ -403,47 +503,52 @@ export const getAdminOrders = async (req, res, next) => {
       });
     }
 
-    const orders = await prisma.order.findMany({
-      where: { adminId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where: { adminId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
           },
-        },
-        discount: {
-          select: {
-            id: true,
-            code: true,
-            percentage: true,
-            validTill: true,
+          discount: {
+            select: {
+              id: true,
+              code: true,
+              percentage: true,
+              validTill: true,
+            },
           },
-        },
-        items: {
-          include: {
-            product: {
-              select: {
-                id: true,
-                name: true,
-                price: true,
-                imageUrl: true,
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  price: true,
+                  imageUrl: true,
+                },
               },
             },
           },
-        },
-        Invoice: {
-          select: {
-            id: true,
-            pdfUrl: true,
-            createdAt: true,
+          Invoice: {
+            select: {
+              id: true,
+              pdfUrl: true,
+              createdAt: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.order.count({ where: { adminId } }),
+    ]);
 
     const enhancedOrders = orders.map((order) => {
       const subtotal = order.items.reduce(
@@ -473,6 +578,12 @@ export const getAdminOrders = async (req, res, next) => {
       status: "success",
       results: enhancedOrders.length,
       data: enhancedOrders,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     next(error);
@@ -481,23 +592,45 @@ export const getAdminOrders = async (req, res, next) => {
 
 export const getAdminDiscounts = async (req, res, next) => {
   try {
-    const adminId = Number(req.params.adminId);
-    if (isNaN(adminId))
-      return res
-        .status(400)
-        .json({ status: "fail", message: "Invalid admin ID" });
+    const { adminId } = adminIdParamSchema.parse(req.params);
+    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
 
-    const discounts = await prisma.discount.findMany({
-      where: {
-        users: {
-          some: {
-            adminId: adminId,
+    const skip = (page - 1) * limit;
+
+    const [discounts, total] = await Promise.all([
+      prisma.discount.findMany({
+        where: {
+          users: {
+            some: {
+              adminId: adminId,
+            },
           },
         },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.discount.count({
+        where: {
+          users: {
+            some: {
+              adminId: adminId,
+            },
+          },
+        },
+      }),
+    ]);
+
+    res.json({
+      status: "success",
+      data: discounts,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: { createdAt: "desc" },
     });
-    res.json({ status: "success", data: discounts });
   } catch (error) {
     next(error);
   }
