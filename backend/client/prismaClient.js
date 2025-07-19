@@ -1,12 +1,25 @@
+// client/prismaClient.js
+
 import { PrismaClient } from "../generated/prisma/client.js";
 
-// Configuration constants
-const CONNECTION_TIMEOUT = 15; // Increased for Neon cold starts
-const POOL_TIMEOUT = 10;
-const MAX_RETRIES = 5; // Increased retry attempts
-const RETRY_DELAY = 2500; // ms (with exponential backoff)
+// ===🔧 Configuration Constants ===
+const CONNECTION_TIMEOUT = 15; // seconds
+const POOL_TIMEOUT = 10; // seconds
+const CONNECTION_LIMIT = 5; // for Neon + PgBouncer
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 2500; // ms for exponential backoff
+const HEALTH_CHECK_INTERVAL = 300_000; // 5 minutes
 
-// Enhanced Neon-optimized Prisma Client
+// ===🌐 Construct Optimized Neon-Compatible DB URL ===
+const dbUrl =
+  process.env.DATABASE_URL +
+  `&connect_timeout=${CONNECTION_TIMEOUT}` +
+  `&pool_timeout=${POOL_TIMEOUT}` +
+  `&connection_limit=${CONNECTION_LIMIT}` +
+  `&pgbouncer=true` +
+  `&max_idle_time=10000`; // Prevent stale idle connections
+
+// ===🧠 Singleton Prisma Client with Enhanced Logging ===
 const prisma = new PrismaClient({
   log: [
     process.env.NODE_ENV === "development" ? "query" : "warn",
@@ -15,13 +28,7 @@ const prisma = new PrismaClient({
     "error",
   ],
   datasources: {
-    db: {
-      url:
-        process.env.DATABASE_URL +
-        `&connect_timeout=${CONNECTION_TIMEOUT}` +
-        `&pool_timeout=${POOL_TIMEOUT}` +
-        `&connection_limit=20`, // Increased for better pooling
-    },
+    db: { url: dbUrl },
   },
   __internal: {
     engine: {
@@ -32,10 +39,11 @@ const prisma = new PrismaClient({
   },
 });
 
-// Connection state with exponential backoff
+// ===📡 Connection State Tracking ===
 let isConnected = false;
 let connectionRetries = 0;
 
+// ===🔁 Retry Logic with Exponential Backoff ===
 export async function ensureConnection() {
   if (isConnected) return prisma;
 
@@ -47,33 +55,38 @@ export async function ensureConnection() {
     return prisma;
   } catch (error) {
     const attempt = connectionRetries + 1;
-    console.error(`❌ Connection attempt ${attempt}/${MAX_RETRIES} failed`);
+    console.error(
+      `❌ Connection attempt ${attempt}/${MAX_RETRIES} failed`,
+      error
+    );
 
     if (attempt < MAX_RETRIES) {
       connectionRetries++;
-      const delay = Math.min(RETRY_DELAY * Math.pow(2, attempt - 1), 30000);
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      const delay = Math.min(RETRY_DELAY_MS * 2 ** (attempt - 1), 30_000);
+      await new Promise((res) => setTimeout(res, delay));
       return ensureConnection();
     }
 
     console.error("💥 Maximum connection retries reached");
-    throw new Error(`Database connection failed after ${MAX_RETRIES} attempts`);
+    throw new Error("Database connection failed after maximum retries.");
   }
 }
 
+// ===🧪 Realistic DB Health Check ===
 export async function checkNeonConnection() {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    // Check actual queryable schema instead of just `SELECT 1`
+    await prisma.user.findFirst({ select: { id: true } });
     return true;
   } catch (error) {
-    console.error("Database health check failed:", error);
+    console.error("🧨 Database health check failed:", error);
     return false;
   }
 }
 
-// Enhanced shutdown handler
-const shutdownHandlers = ["beforeExit", "SIGTERM", "SIGINT", "SIGUSR2"];
-shutdownHandlers.forEach((event) => {
+// ===🧹 Graceful Shutdown Handling ===
+const shutdownEvents = ["beforeExit", "SIGINT", "SIGTERM", "SIGUSR2"];
+shutdownEvents.forEach((event) => {
   process.on(event, async () => {
     if (!isConnected) return;
 
@@ -82,31 +95,37 @@ shutdownHandlers.forEach((event) => {
       isConnected = false;
       console.log("🚪 Prisma connection closed gracefully");
     } catch (error) {
-      console.error("Shutdown error:", error);
+      console.error("❌ Error during shutdown:", error);
     } finally {
-      if (event !== "beforeExit") process.exit(0);
+      if (["SIGINT", "SIGTERM"].includes(event)) process.exit(0);
     }
   });
 });
 
-// Initialize with periodic health checks
-// Change this in prismaClient.js
+// // Optional: Prisma internal exit hook
+// prisma.$on("beforeExit", async () => {
+//   if (isConnected) {
+//     await prisma.$disconnect();
+//     isConnected = false;
+//     console.log("⚠️ Prisma disconnected via beforeExit hook");
+//   }
+// });
+
+// ===🔄 Periodic Health Checker ===
 (async () => {
-  if (!isConnected) {
-    // Add this check
-    try {
-      await ensureConnection();
-      setInterval(async () => {
-        if (!(await checkNeonConnection())) {
-          console.log("Reconnecting...");
-          isConnected = false;
-          await ensureConnection();
-        }
-      }, 300000);
-    } catch (error) {
-      console.error("Initialization failed:", error);
-      process.exit(1);
-    }
+  try {
+    await ensureConnection();
+    setInterval(async () => {
+      const healthy = await checkNeonConnection();
+      if (!healthy) {
+        console.log("🔁 DB connection lost. Reconnecting...");
+        isConnected = false;
+        await ensureConnection();
+      }
+    }, HEALTH_CHECK_INTERVAL);
+  } catch (error) {
+    console.error("🚫 Prisma initialization failed:", error);
+    process.exit(1);
   }
 })();
 

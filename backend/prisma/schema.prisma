@@ -4,16 +4,207 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  relationMode = "prisma"
-  directUrl = env("DIRECT_DATABASE_URL")
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  directUrl    = env("DIRECT_DATABASE_URL")
+  relationMode = "foreignKeys"
+}
+
+model Admin {
+  id            Int            @id @default(autoincrement())
+  name          String
+  email         String         @unique
+  password      String
+  phoneNumber   String?
+  avatarUrl     String?
+  role          Role           @default(SUPERADMIN)
+  status        Status         @default(ACTIVE)
+  lastLoginAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  inquiries     Inquiry[]
+  inventoryLogs InventoryLog[]
+  invoices      Invoice[]
+  orders        Order[]
+  products      Product[]
+  reports       Report[]
+  settings      Setting[]
+  customers     User[]         @relation("AdminUsers")
 }
 
 model User {
+  id          Int        @id @default(autoincrement())
+  name        String
+  email       String     @unique
+  password    String
+  phone       String?
+  avatarUrl   String?
+  address     String?
+  preferences Json?
+  createdAt   DateTime   @default(now())
+  adminId     Int?
+  cart        Cart?
+  orders      Order[]
+  reviews     Review[]
+  admin       Admin?     @relation("AdminUsers", fields: [adminId], references: [id])
+  wishlist    Wishlist?
+  discounts   Discount[] @relation("DiscountToUser")
+}
+
+model Discount {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique
+  percentage Float
+  validTill  DateTime
+  createdAt  DateTime @default(now())
+  orders     Order[]
+  users      User[]   @relation("DiscountToUser")
+}
+
+model Product {
+  id                Int                 @id @default(autoincrement())
+  name              String
+  price             Float
+  description       String?
+  imageUrl          String?
+  createdById       Int
+  createdAt         DateTime            @default(now())
+  cartItems         CartItem[]
+  InventoryLog      InventoryLog[]
+  orderItems        OrderItem[]
+  createdBy         Admin               @relation(fields: [createdById], references: [id])
+  reviews           Review[]
+  wishlistItems WishlistItem[]
+
+}
+
+model Order {
+  id         Int         @id @default(autoincrement())
+  status     String
+  userId     Int
+  adminId    Int?
+  discountId Int?
+  createdAt  DateTime    @default(now())
+  Invoice    Invoice[]
+  assignedTo Admin?      @relation(fields: [adminId], references: [id])
+  discount   Discount?   @relation(fields: [discountId], references: [id])
+  user       User        @relation(fields: [userId], references: [id])
+  items      OrderItem[]
+}
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  quantity  Int
+  price     Float
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @unique
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+}
+
+model CartItem {
+  id        Int     @id @default(autoincrement())
+  cartId    Int
+  productId Int
+  quantity  Int
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Wishlist {
+  id                Int                 @id @default(autoincrement())
+  userId            Int                 @unique
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wishlistItems     WishlistItem[]
+}
+
+model WishlistItem {
+  id         Int      @id @default(autoincrement())
+  wishlistId Int
+  productId  Int
+  addedAt    DateTime @default(now())
+
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([wishlistId, productId]) // prevent duplicate entries
+  @@index([productId])
+}
+
+
+
+model Review {
   id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String
+  userId    Int
+  productId Int
+  rating    Int
+  comment   String?
   createdAt DateTime @default(now())
-  }
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Inquiry {
+  id         Int      @id @default(autoincrement())
+  message    String
+  adminId    Int?
+  createdAt  DateTime @default(now())
+  assignedTo Admin?   @relation(fields: [adminId], references: [id])
+}
+
+model InventoryLog {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  change    Int
+  reason    String
+  adminId   Int
+  createdAt DateTime @default(now())
+  admin     Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  Product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  title       String
+  adminId     Int
+  createdAt   DateTime @default(now())
+  generatedBy Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+}
+
+model Setting {
+  id      Int    @id @default(autoincrement())
+  key     String
+  value   String
+  adminId Int?
+  admin   Admin? @relation(fields: [adminId], references: [id])
+}
+
+model Invoice {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  pdfUrl      String
+  adminId     Int
+  createdAt   DateTime @default(now())
+  generatedBy Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  Order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+enum Role {
+  SUPERADMIN
+  MANAGER
+  SUPPORT
+}
+
+enum Status {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
