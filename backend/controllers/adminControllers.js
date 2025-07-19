@@ -1,6 +1,6 @@
 // backend/controllers/adminController.js
 import prisma from "../client/prismaClient.js";
-import { Role, Status } from "../generated/prisma/index.js";
+import { Status } from "../generated/prisma/index.js";
 import {
   adminCreateSchema,
   adminUpdateSchema,
@@ -26,7 +26,6 @@ export const getAdmins = async (req, res, next) => {
           name: true,
           email: true,
           phoneNumber: true,
-          role: true,
           status: true,
           lastLoginAt: true,
           createdAt: true,
@@ -76,7 +75,6 @@ export const getAdmin = async (req, res, next) => {
         email: true,
         phoneNumber: true,
         avatarUrl: true,
-        role: true,
         status: true,
         lastLoginAt: true,
         createdAt: true,
@@ -116,14 +114,12 @@ export const createAdmin = async (req, res, next) => {
     const newAdmin = await prisma.admin.create({
       data: {
         ...validatedData,
-        role: validatedData.role || Role.SUPERADMIN,
       },
       select: {
         id: true,
         name: true,
         email: true,
         phoneNumber: true,
-        role: true,
         status: true,
         createdAt: true,
       },
@@ -178,7 +174,6 @@ export const updateAdmin = async (req, res, next) => {
         email: true,
         phoneNumber: true,
         avatarUrl: true,
-        role: true,
         status: true,
         updatedAt: true,
       },

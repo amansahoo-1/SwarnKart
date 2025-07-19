@@ -25,7 +25,6 @@ const authenticate = async (req, res, next) => {
         name: true,
         email: true,
         adminId: true,
-        role: true,
         status: true,
       },
     });
@@ -75,47 +74,6 @@ const requireAdmin = async (req, res, next) => {
 };
 
 /**
- * Middleware that requires superadmin privileges
- */
-const requireSuperAdmin = async (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ error: "Authentication required" });
-  }
-
-  const admin = await prisma.admin.findUnique({
-    where: { id: req.user.adminId || req.user.id },
-  });
-
-  if (!admin || admin.role !== "SUPERADMIN") {
-    return res.status(403).json({ error: "Superadmin access required" });
-  }
-
-  next();
-};
-
-/**
- * Role-based access control middleware
- * @param {...string} allowedRoles - Roles that are allowed to access the route
- */
-const requireRole = (...allowedRoles) => {
-  return async (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ error: "Authentication required" });
-    }
-
-    const admin = await prisma.admin.findUnique({
-      where: { id: req.user.adminId || req.user.id },
-    });
-
-    if (!admin || !allowedRoles.includes(admin.role)) {
-      return res.status(403).json({ error: "Insufficient privileges" });
-    }
-
-    next();
-  };
-};
-
-/**
  * Middleware to check if user account is active
  */
 const checkAccountStatus = async (req, res, next) => {
@@ -140,6 +98,9 @@ const checkAccountStatus = async (req, res, next) => {
   next();
 };
 
+/**
+ * Middleware to authorize user access to their own data
+ */
 const authorizeUserAccess = async (req, res, next) => {
   const { userId } = req.params;
 
@@ -158,13 +119,10 @@ const authorizeUserAccess = async (req, res, next) => {
   next();
 };
 
-// Update your exports to include authorizeUserAccess
 export {
   authenticate,
   requireAuth,
   requireAdmin,
-  requireSuperAdmin,
-  requireRole,
   checkAccountStatus,
   authorizeUserAccess,
 };
