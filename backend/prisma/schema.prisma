@@ -17,6 +17,7 @@ model Admin {
   password      String
   phoneNumber   String?
   avatarUrl     String?
+  role          Role           @default(ADMIN)
   status        Status         @default(ACTIVE)
   lastLoginAt   DateTime?
   createdAt     DateTime       @default(now())
@@ -41,14 +42,18 @@ model User {
   address     String?
   preferences Json?
   createdAt   DateTime   @default(now())
-  admin       Admin      @relation(fields: [adminId], references: [id])
-  adminId     Int
+
+  // Optional admin reference
+  admin       Admin?     @relation(fields: [adminId], references: [id])
+  adminId     Int?
+
   cart        Cart?
   orders      Order[]
   reviews     Review[]
   wishlist    Wishlist?
   discounts   Discount[]
 }
+
 
 model Discount {
   id         Int      @id @default(autoincrement())
@@ -192,6 +197,11 @@ model Invoice {
   admin       Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
   adminId     Int
   createdAt   DateTime @default(now())
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
 }
 
 enum Status {

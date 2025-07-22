@@ -1,4 +1,7 @@
 -- CreateEnum
+CREATE TYPE "Role" AS ENUM ('SUPERADMIN', 'ADMIN');
+
+-- CreateEnum
 CREATE TYPE "Status" AS ENUM ('ACTIVE', 'SUSPENDED', 'DELETED');
 
 -- CreateEnum
@@ -12,6 +15,7 @@ CREATE TABLE "Admin" (
     "password" TEXT NOT NULL,
     "phoneNumber" TEXT,
     "avatarUrl" TEXT,
+    "role" "Role" NOT NULL DEFAULT 'ADMIN',
     "status" "Status" NOT NULL DEFAULT 'ACTIVE',
     "lastLoginAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -31,7 +35,7 @@ CREATE TABLE "User" (
     "address" TEXT,
     "preferences" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "adminId" INTEGER NOT NULL,
+    "adminId" INTEGER,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
@@ -221,7 +225,7 @@ CREATE UNIQUE INDEX "WishlistItem_wishlistId_productId_key" ON "WishlistItem"("w
 CREATE INDEX "_DiscountToUser_B_index" ON "_DiscountToUser"("B");
 
 -- AddForeignKey
-ALTER TABLE "User" ADD CONSTRAINT "User_adminId_fkey" FOREIGN KEY ("adminId") REFERENCES "Admin"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "User" ADD CONSTRAINT "User_adminId_fkey" FOREIGN KEY ("adminId") REFERENCES "Admin"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Product" ADD CONSTRAINT "Product_adminId_fkey" FOREIGN KEY ("adminId") REFERENCES "Admin"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

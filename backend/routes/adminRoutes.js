@@ -1,8 +1,8 @@
-// routes/adminRoutes.js
 import express from "express";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import {
-  getAdmins,
+  loginSuperAdmin,
+  loginAdmin,
   getAdmin,
   createAdmin,
   updateAdmin,
@@ -17,6 +17,7 @@ import {
   getAdminOrders,
   getAdminDiscounts,
 } from "../controllers/adminControllers.js";
+
 import {
   adminCreateSchema,
   adminUpdateSchema,
@@ -26,128 +27,128 @@ import { validateRequest } from "../middleware/validation.middleware.js";
 import {
   authenticate,
   requireAuth,
-  requireAdmin,
-  requireSuperAdmin,
-  requireRole,
   checkAccountStatus,
 } from "../middleware/authMiddleware.js";
-import { paginationSchema } from "../validations/common.validation.js";
+
+import {
+  paginationSchema,
+  loginSchema,
+} from "../validations/common.validation.js";
+import { checkRole } from "../middleware/authMiddleware.js";
+import { Role } from "../generated/prisma/index.js";
 
 const adminRouter = express.Router();
 
-// Apply authentication and account status check to all admin routes
+// Unprotected
+
+adminRouter.post(
+  "/login-superadmin",
+  validateRequest({ body: loginSchema }),
+  asyncHandler(loginSuperAdmin)
+);
+
+adminRouter.post(
+  "/login",
+  validateRequest({ body: loginSchema }),
+  asyncHandler(loginAdmin)
+);
+
+// Protect all below routes
 adminRouter.use(authenticate, requireAuth, checkAccountStatus);
 
-// Validation middleware
 const validatePagination = validateRequest({ query: paginationSchema });
 const validateAdminId = validateRequest({ params: adminIdParamSchema });
 const validateCreateAdmin = validateRequest({ body: adminCreateSchema });
 const validateUpdateAdmin = validateRequest({ body: adminUpdateSchema });
 
-// Basic admin CRUD routes
-adminRouter.get(
-  "/",
-  requireRole("SUPERADMIN", "MANAGER"),
-  validatePagination,
-  asyncHandler(getAdmins)
-);
+// 🔒 SUPERADMIN ONLY
 
 adminRouter.post(
   "/",
-  requireSuperAdmin,
+  checkRole([Role.SUPERADMIN]),
   validateCreateAdmin,
   asyncHandler(createAdmin)
 );
+adminRouter.delete(
+  "/:adminId",
+  checkRole([Role.SUPERADMIN]),
+  validateAdminId,
+  asyncHandler(deleteAdmin)
+);
 
+// 🔒 SUPERADMIN + ADMIN (self-based enforcement can be added in controller logic)
 adminRouter.get(
   "/:adminId",
-  requireAdmin,
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   asyncHandler(getAdmin)
 );
-
 adminRouter.put(
   "/:adminId",
-  requireAdmin,
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   validateUpdateAdmin,
   asyncHandler(updateAdmin)
 );
 
-adminRouter.delete(
-  "/:adminId",
-  requireSuperAdmin,
-  validateAdminId,
-  asyncHandler(deleteAdmin)
-);
-
-// Admin-related entities routes with role-based access
 adminRouter.get(
   "/:adminId/users",
-  requireRole("SUPERADMIN", "MANAGER"),
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   validatePagination,
   asyncHandler(getAdminUsers)
 );
-
 adminRouter.get(
   "/:adminId/products",
-  requireAdmin,
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   validatePagination,
   asyncHandler(getAdminProducts)
 );
-
 adminRouter.get(
   "/:adminId/inventory-logs",
-  requireRole("SUPERADMIN", "MANAGER"),
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   validatePagination,
   asyncHandler(getAdminInventoryLogs)
 );
-
 adminRouter.get(
   "/:adminId/reports",
-  requireAdmin,
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   validatePagination,
   asyncHandler(getAdminReports)
 );
-
 adminRouter.get(
   "/:adminId/invoices",
-  requireRole("SUPERADMIN", "MANAGER", "SUPPORT"),
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   validatePagination,
   asyncHandler(getAdminInvoices)
 );
-
 adminRouter.get(
   "/:adminId/inquiries",
-  requireRole("SUPERADMIN", "SUPPORT"),
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   validatePagination,
   asyncHandler(getAdminInquiries)
 );
-
 adminRouter.get(
   "/:adminId/settings",
-  requireSuperAdmin,
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   asyncHandler(getAdminSettings)
 );
-
 adminRouter.get(
   "/:adminId/orders",
-  requireRole("SUPERADMIN", "MANAGER", "SUPPORT"),
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   validatePagination,
   asyncHandler(getAdminOrders)
 );
-
 adminRouter.get(
   "/:adminId/discounts",
-  requireRole("SUPERADMIN", "MANAGER"),
+  checkRole([Role.SUPERADMIN, Role.ADMIN]),
   validateAdminId,
   validatePagination,
   asyncHandler(getAdminDiscounts)

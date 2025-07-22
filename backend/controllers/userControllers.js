@@ -9,6 +9,49 @@ import {
 } from "../validations/user.validation.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { paginationSchema } from "../validations/common.validation.js";
+import { hashPassword, comparePassword } from "../utils/hash.js";
+import {
+  generateUserToken,
+  generateToken,
+  verifyToken,
+  safeDecode,
+} from "../utils/jwt.js";
+import jwt from "jsonwebtoken";
+
+export const loginUser = asyncHandler(async (req, res) => {
+  const { email, password } = loginSchema.parse(req.body);
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (!user) {
+    return res.status(401).json({
+      status: "fail",
+      message: "Invalid email or password",
+    });
+  }
+
+  const isPasswordValid = await comparePassword(password, user.password);
+  if (!isPasswordValid) {
+    return res.status(401).json({
+      status: "fail",
+      message: "Invalid email or password",
+    });
+  }
+
+  // Generate JWT
+  const token = generateUserToken(user);
+
+  // Remove password from response
+  const { password: _, ...userData } = user;
+
+  res.json({
+    status: "success",
+    token,
+    data: userData,
+  });
+});
 
 export const getUsers = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
@@ -75,40 +118,28 @@ export const getUserById = asyncHandler(async (req, res) => {
 });
 
 export const createUser = asyncHandler(async (req, res) => {
-  const validatedData = userCreateSchema.parse(req.body);
+  const userData = userCreateSchema.parse(req.body);
 
-  // Check if email already exists
-  const existingUser = await prisma.user.findUnique({
-    where: { email: validatedData.email },
-  });
+  // Hash the password before saving
+  const hashedPassword = await hashPassword(userData.password);
 
-  if (existingUser) {
-    return res.status(409).json({
-      status: "fail",
-      message: "Email already in use",
-    });
-  }
-
-  const newUser = await prisma.user.create({
+  const user = await prisma.user.create({
     data: {
-      ...validatedData,
-      // Password should be hashed before this point in middleware
-      adminId: validatedData.adminId || null,
+      ...userData,
+      password: hashedPassword,
     },
     select: {
       id: true,
       name: true,
       email: true,
-      phone: true,
-      avatarUrl: true,
-      address: true,
-      preferences: true,
       createdAt: true,
-      adminId: true,
     },
   });
 
-  res.status(201).json({ status: "success", data: newUser });
+  res.status(201).json({
+    status: "success",
+    data: user,
+  });
 });
 
 export const updateUser = asyncHandler(async (req, res) => {
