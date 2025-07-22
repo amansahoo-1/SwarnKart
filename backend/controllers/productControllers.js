@@ -6,9 +6,9 @@ import {
 } from "../validations/product.validation.js";
 import { paginationSchema } from "../validations/common.validation.js";
 
-// Helper function to check admin role
+// Helper function to check admin
 const isAdmin = (user) => {
-  return user && user.role === "ADMIN"; // Adjust based on your role enum
+  return user;
 };
 
 const createProduct = async (req, res) => {

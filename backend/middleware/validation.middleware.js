@@ -30,3 +30,12 @@ export const validateRequest = (schemas) => {
     }
   };
 };
+
+export const formatZodError = (error) => {
+  if (error instanceof ZodError) {
+    return error.errors
+      .map((e) => `${e.path.join(".")}: ${e.message}`)
+      .join(", ");
+  }
+  return "Invalid request data";
+};

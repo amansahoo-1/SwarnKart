@@ -1,6 +1,7 @@
 // validations/admin.validation.js
 import { z } from "zod";
-import { Role, Status } from "../generated/prisma/index.js";
+import { Role } from "../generated/prisma/index.js";
+import { Status } from "../generated/prisma/index.js";
 import {
   idSchema,
   emailSchema,
@@ -14,8 +15,8 @@ export const adminCreateSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   phoneNumber: phoneSchema,
-  role: z.nativeEnum(Role).optional(),
   avatarUrl: urlSchema.optional(),
+  role: z.nativeEnum(Role),
 });
 
 export const adminUpdateSchema = z
@@ -24,7 +25,6 @@ export const adminUpdateSchema = z
     email: emailSchema.optional(),
     phoneNumber: phoneSchema,
     avatarUrl: urlSchema.optional(),
-    role: z.nativeEnum(Role).optional(),
     status: z.nativeEnum(Status).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {

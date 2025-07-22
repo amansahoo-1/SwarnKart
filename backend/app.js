@@ -9,6 +9,7 @@ import morgan from "morgan";
 import { errorHandler, notFoundHandler } from "./middleware/errorMiddleware.js";
 import userRoutes from "./routes/userRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import Initrouter from "./routes/initRoutes.js";
 
 // Config initialization
 const __filename = fileURLToPath(import.meta.url);
@@ -66,6 +67,7 @@ app.get("/health", (req, res) => {
 // API Routes
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/init", Initrouter); // ✅ BOOTSTRAP SUPERADMIN ROUTE
 
 // Error handling
 app.use(notFoundHandler);

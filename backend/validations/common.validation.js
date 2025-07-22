@@ -4,7 +4,10 @@ import { z } from "zod";
 export const idSchema = z.number().int().positive();
 export const emailSchema = z.string().email();
 export const passwordSchema = z.string().min(8);
-export const phoneSchema = z.string().regex(/^\+?[0-9]{10,15}$/);
+export const phoneSchema = z
+  .string()
+  .regex(/^\+?[0-9]{10,15}$/)
+  .optional();
 export const urlSchema = z.string().url().optional();
 
 export const paginationSchema = z
@@ -15,3 +18,8 @@ export const paginationSchema = z
     order: z.enum(["asc", "desc"]).optional(),
   })
   .partial();
+
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+});
