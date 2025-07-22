@@ -1,13 +1,30 @@
+import type { UserPreferences } from "./UserPreference";
+
 export interface User {
   id: number;
   name: string;
   email: string;
-  createdAt: string; // Changed from Date to string for API responses
+  phone?: string;
+  avatarUrl?: string;
+  address?: string;
+  preferences?: UserPreferences;
+  createdAt: string; // ISO string
+  adminId?: number;
 }
 
-// For creating new users
 export interface CreateUserDto {
   name: string;
   email: string;
   password: string;
+  phone?: string;
+  address?: string;
+}
+
+export interface UpdateUserDto {
+  name?: string;
+  email?: string;
+  password?: string;
+  phone?: string;
+  address?: string;
+  preferences?: UserPreferences;
 }
