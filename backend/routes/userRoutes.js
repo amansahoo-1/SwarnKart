@@ -33,6 +33,7 @@ import {
   requireAuth,
   checkAccountStatus,
   authorizeUserAccess,
+  checkRole,
 } from "../middleware/authMiddleware.js";
 import { loginSchema } from "../validations/common.validation.js";
 
@@ -52,7 +53,7 @@ userRouter.post(
 );
 
 // Auth-protected routes
-userRouter.use(authenticate, requireAuth, checkAccountStatus);
+userRouter.use(authenticate, requireAuth, checkAccountStatus, checkRole);
 
 // Validation middleware
 const validatePagination = validateRequest({ query: paginationSchema });

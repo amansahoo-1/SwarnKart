@@ -10,12 +10,7 @@ import {
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { paginationSchema } from "../validations/common.validation.js";
 import { hashPassword, comparePassword } from "../utils/hash.js";
-import {
-  generateUserToken,
-  generateToken,
-  verifyToken,
-  safeDecode,
-} from "../utils/jwt.js";
+import { generateUserToken } from "../utils/jwt.js";
 import jwt from "jsonwebtoken";
 
 export const loginUser = asyncHandler(async (req, res) => {

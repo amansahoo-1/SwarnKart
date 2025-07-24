@@ -6,7 +6,7 @@ import { adminCreateSchema } from "../validations/admin.validation.js";
 import { hashPassword } from "../utils/hash.js";
 
 export const bootstrapSuperAdmin = asyncHandler(async (req, res) => {
-  const { secret } = req.query; // or use req.headers['x-superadmin-secret']
+  const { secret } = req.query;
 
   if (secret !== process.env.SUPERADMIN_SECRET) {
     return res.status(401).json({ message: "Unauthorized access" });
