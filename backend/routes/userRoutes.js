@@ -7,25 +7,11 @@ import {
   createUser,
   updateUser,
   deleteUser,
-  getCart,
-  updateCart,
-  getWishlist,
-  updateWishlist,
-  getOrders,
-  getReviews,
-  createReview,
-  getDiscounts,
-  addDiscount,
 } from "../controllers/userControllers.js";
 import {
   userCreateSchema,
   userUpdateSchema,
   userIdParamSchema,
-  cartUpdateSchema,
-  wishlistItemSchema,
-  reviewCreateSchema,
-  discountCodeSchema,
-  paginationSchema,
 } from "../validations/user.validation.js";
 import { validateRequest } from "../middleware/validation.middleware.js";
 import {
@@ -33,13 +19,15 @@ import {
   requireAuth,
   checkAccountStatus,
   authorizeUserAccess,
-  checkRole,
 } from "../middleware/authMiddleware.js";
-import { loginSchema } from "../validations/common.validation.js";
+import {
+  loginSchema,
+  paginationSchema,
+} from "../validations/common.validation.js";
 
 const userRouter = express.Router();
 
-// Public route
+// ====================== Public Routes ======================
 userRouter.post(
   "/login",
   validateRequest({ body: loginSchema }),
@@ -52,19 +40,15 @@ userRouter.post(
   asyncHandler(createUser)
 );
 
-// Auth-protected routes
-userRouter.use(authenticate, requireAuth, checkAccountStatus, checkRole);
+// ====================== Protected Routes ======================
+userRouter.use(authenticate, requireAuth(), checkAccountStatus);
 
-// Validation middleware
+// Reusable validation middleware
 const validatePagination = validateRequest({ query: paginationSchema });
 const validateUserId = validateRequest({ params: userIdParamSchema });
 const validateUpdateUser = validateRequest({ body: userUpdateSchema });
-const validateCartUpdate = validateRequest({ body: cartUpdateSchema });
-const validateWishlistUpdate = validateRequest({ body: wishlistItemSchema });
-const validateReviewCreate = validateRequest({ body: reviewCreateSchema });
-const validateDiscountCode = validateRequest({ body: discountCodeSchema });
 
-// CRUD operations
+// User management routes
 userRouter.get("/", validatePagination, asyncHandler(getUsers));
 
 userRouter.get(
@@ -87,80 +71,6 @@ userRouter.delete(
   authorizeUserAccess,
   validateUserId,
   asyncHandler(deleteUser)
-);
-
-// Cart routes
-userRouter.get(
-  "/:userId/cart",
-  authorizeUserAccess,
-  validateUserId,
-  asyncHandler(getCart)
-);
-
-userRouter.put(
-  "/:userId/cart",
-  authorizeUserAccess,
-  validateUserId,
-  validateCartUpdate,
-  asyncHandler(updateCart)
-);
-
-// Wishlist routes
-userRouter.get(
-  "/:userId/wishlist",
-  authorizeUserAccess,
-  validateUserId,
-  asyncHandler(getWishlist)
-);
-
-userRouter.put(
-  "/:userId/wishlist",
-  authorizeUserAccess,
-  validateUserId,
-  validateWishlistUpdate,
-  asyncHandler(updateWishlist)
-);
-
-// Order routes
-userRouter.get(
-  "/:userId/orders",
-  authorizeUserAccess,
-  validateUserId,
-  validatePagination,
-  asyncHandler(getOrders)
-);
-
-// Review routes
-userRouter.get(
-  "/:userId/reviews",
-  validateUserId,
-  validatePagination,
-  asyncHandler(getReviews)
-);
-
-userRouter.post(
-  "/:userId/reviews",
-  authorizeUserAccess,
-  validateUserId,
-  validateReviewCreate,
-  asyncHandler(createReview)
-);
-
-// Discount routes
-userRouter.get(
-  "/:userId/discounts",
-  authorizeUserAccess,
-  validateUserId,
-  validatePagination,
-  asyncHandler(getDiscounts)
-);
-
-userRouter.post(
-  "/:userId/discounts",
-  authorizeUserAccess,
-  validateUserId,
-  validateDiscountCode,
-  asyncHandler(addDiscount)
 );
 
 export default userRouter;

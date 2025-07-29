@@ -6,3 +6,5 @@ export const inquiryCreateSchema = z.object({
   message: z.string().min(10),
   adminId: idSchema.optional(),
 });
+
+export const inventoryBulkUpdateSchema = z.object({});

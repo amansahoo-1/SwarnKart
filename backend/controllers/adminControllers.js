@@ -1,12 +1,10 @@
 // backend/controllers/adminController.js
 import prisma from "../client/prismaClient.js";
-import { Status } from "../generated/prisma/index.js";
 import {
   adminCreateSchema,
   adminUpdateSchema,
   adminIdParamSchema,
 } from "../validations/admin.validation.js";
-import { paginationSchema } from "../validations/common.validation.js";
 import { hashPassword, comparePassword } from "../utils/hash.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { generateAdminToken } from "../utils/jwt.js";
@@ -14,7 +12,7 @@ import {
   successResponse,
   errorResponse,
 } from "../middleware/errorMiddleware.js";
-import { Role } from "../generated/prisma/index.js";
+import { Role, Status } from "../generated/prisma/index.js";
 
 // ♻️ Reusable select fields
 export const adminSelectFields = {
@@ -68,22 +66,62 @@ export const loginSuperAdmin = asyncHandler(async (req, res) => {
 });
 
 // ✅ Admin Login
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_TIME = 15 * 60 * 1000; // 15 minutes
+
 export const loginAdmin = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   const admin = await prisma.admin.findUnique({ where: { email } });
+
+  // Check if admin exists and isn't deleted
   if (!admin || admin.status === Status.DELETED) {
     return errorResponse(res, "Invalid credentials", 401);
   }
 
-  const isMatch = await comparePassword(password, admin.password);
-  if (!isMatch) return errorResponse(res, "Invalid credentials", 401);
+  // Check if account is locked
+  if (
+    admin.loginAttempts >= MAX_LOGIN_ATTEMPTS &&
+    new Date(admin.lastLoginAttempt) > new Date(Date.now() - LOCK_TIME)
+  ) {
+    return errorResponse(
+      res,
+      "Account temporarily locked. Try again later.",
+      423
+    );
+  }
 
+  const isMatch = await comparePassword(password, admin.password);
+
+  if (!isMatch) {
+    // Update failed login attempt
+    await prisma.admin.update({
+      where: { id: admin.id },
+      data: {
+        loginAttempts: { increment: 1 },
+        lastLoginAttempt: new Date(),
+      },
+    });
+
+    const attemptsLeft = MAX_LOGIN_ATTEMPTS - (admin.loginAttempts + 1);
+    const message =
+      attemptsLeft > 0
+        ? `Invalid credentials. ${attemptsLeft} attempts remaining.`
+        : "Account locked due to too many failed attempts. Try again later.";
+
+    return errorResponse(res, message, 401);
+  }
+
+  // On successful login
   const token = generateAdminToken({ id: admin.id, role: admin.role });
 
   await prisma.admin.update({
     where: { id: admin.id },
-    data: { lastLoginAt: new Date() },
+    data: {
+      lastLoginAt: new Date(),
+      loginAttempts: 0, // Reset attempts on successful login
+      lastLoginAttempt: null,
+    },
   });
 
   return successResponse(
@@ -124,7 +162,7 @@ export const getAdmin = asyncHandler(async (req, res) => {
     }),
     prisma.admin.count({
       where: {
-        status: "ACTIVE", // Must match findMany filter
+        status: "ACTIVE",
       },
     }),
   ]);
@@ -210,7 +248,7 @@ export const updateAdmin = asyncHandler(async (req, res) => {
 export const deleteAdmin = asyncHandler(async (req, res) => {
   const { id } = adminIdParamSchema.parse(req.params);
 
-  // 🛡️ Enforce SuperAdmin-only deletion
+  // Enforce SuperAdmin-only deletion
   if (req.admin?.role !== Role.SUPERADMIN) {
     return errorResponse(res, "Only SuperAdmin can delete admins", 403);
   }
@@ -231,36 +269,36 @@ export const deleteAdmin = asyncHandler(async (req, res) => {
 });
 
 // admin id is optional for user can be created both from independently and by admin
-export const getAdminUsers = asyncHandler(async (req, res, next) => {
-  try {
-    const { adminId } = adminIdParamSchema.parse(req.params);
-    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
+// 1. Consistent Response Format
+// Use successResponse/errorResponse consistently everywhere
+export const getAdminUsers = asyncHandler(async (req, res) => {
+  const { adminId } = req.validated.params;
+  const { page = 1, limit = 10 } = req.validated.query;
+  const skip = (page - 1) * limit;
 
-    const skip = (page - 1) * limit;
+  const whereClause = adminId ? { adminId } : {};
 
-    const whereClause = adminId
-      ? { adminId } // only fetch users managed by this admin
-      : {}; // fetch all users if adminId is not specified
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        createdAt: true,
+      },
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.user.count({ where: whereClause }),
+  ]);
 
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          createdAt: true,
-        },
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.user.count({ where: whereClause }),
-    ]);
-
-    res.json({
-      status: "success",
+  // Use successResponse instead of direct res.json()
+  return successResponse(
+    res,
+    {
       data: users,
       pagination: {
         total,
@@ -268,385 +306,41 @@ export const getAdminUsers = asyncHandler(async (req, res, next) => {
         limit,
         totalPages: Math.ceil(total / limit),
       },
-    });
-  } catch (error) {
-    next(error);
-  }
+    },
+    "Users fetched successfully"
+  );
 });
 
-export const getAdminProducts = asyncHandler(async (req, res, next) => {
-  try {
-    const { adminId } = adminIdParamSchema.parse(req.params);
-    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
+// 2. Add Admin Dashboard Endpoint
+export const getAdminDashboardStats = asyncHandler(async (req, res) => {
+  const stats = await prisma.$transaction([
+    prisma.user.count(),
+    prisma.order.count({ where: { adminId: req.user.id } }),
+    prisma.product.count({ where: { adminId: req.user.id } }),
+    // Add more metrics as needed
+  ]);
 
-    const skip = (page - 1) * limit;
-
-    const [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where: { createdById: adminId },
-        select: {
-          id: true,
-          name: true,
-          price: true,
-          description: true,
-          imageUrl: true,
-          createdAt: true,
-        },
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.product.count({ where: { createdById: adminId } }),
-    ]);
-
-    res.json({
-      status: "success",
-      data: products,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
+  return successResponse(
+    res,
+    {
+      totalUsers: stats[0],
+      totalOrders: stats[1],
+      totalProducts: stats[2],
+    },
+    "Dashboard stats fetched"
+  );
 });
 
-export const getAdminInventoryLogs = asyncHandler(async (req, res, next) => {
-  try {
-    const { adminId } = adminIdParamSchema.parse(req.params);
-    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
+// 3. Add Admin Profile Endpoint
+export const getAdminProfile = asyncHandler(async (req, res) => {
+  const admin = await prisma.admin.findUnique({
+    where: { id: req.user.id },
+    select: adminSelectFields,
+  });
 
-    const skip = (page - 1) * limit;
-
-    // Check if admin exists
-    const adminExists = await prisma.admin.findUnique({
-      where: { id: adminId },
-      select: { id: true },
-    });
-
-    if (!adminExists) {
-      return res.status(404).json({
-        status: "fail",
-        message: "Admin not found",
-      });
-    }
-
-    const [logs, total] = await Promise.all([
-      prisma.inventoryLog.findMany({
-        where: { adminId },
-        include: {
-          Product: {
-            select: {
-              id: true,
-              name: true,
-              price: true,
-              imageUrl: true,
-            },
-          },
-          admin: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.inventoryLog.count({ where: { adminId } }),
-    ]);
-
-    res.status(200).json({
-      status: "success",
-      results: logs.length,
-      data: logs,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    next(error);
+  if (!admin) {
+    return errorResponse(res, "Admin not found", 404);
   }
-});
 
-export const getAdminReports = asyncHandler(async (req, res, next) => {
-  try {
-    const { adminId } = adminIdParamSchema.parse(req.params);
-    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
-
-    const skip = (page - 1) * limit;
-
-    const [reports, total] = await Promise.all([
-      prisma.report.findMany({
-        where: { adminId },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.report.count({ where: { adminId } }),
-    ]);
-
-    res.json({
-      status: "success",
-      data: reports,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-export const getAdminInvoices = asyncHandler(async (req, res, next) => {
-  try {
-    const { adminId } = adminIdParamSchema.parse(req.params);
-    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
-
-    const skip = (page - 1) * limit;
-
-    const [invoices, total] = await Promise.all([
-      prisma.invoice.findMany({
-        where: { adminId },
-        include: {
-          Order: {
-            select: {
-              id: true,
-              status: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.invoice.count({ where: { adminId } }),
-    ]);
-
-    res.json({
-      status: "success",
-      data: invoices,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-export const getAdminInquiries = asyncHandler(async (req, res, next) => {
-  try {
-    const { adminId } = adminIdParamSchema.parse(req.params);
-    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
-
-    const skip = (page - 1) * limit;
-
-    const [inquiries, total] = await Promise.all([
-      prisma.inquiry.findMany({
-        where: { adminId },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.inquiry.count({ where: { adminId } }),
-    ]);
-
-    res.json({
-      status: "success",
-      data: inquiries,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-export const getAdminSettings = asyncHandler(async (req, res, next) => {
-  try {
-    const { adminId } = adminIdParamSchema.parse(req.params);
-
-    const settings = await prisma.setting.findMany({
-      where: { adminId },
-    });
-
-    res.json({
-      status: "success",
-      data: settings,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-export const getAdminOrders = asyncHandler(async (req, res, next) => {
-  try {
-    const { adminId } = adminIdParamSchema.parse(req.params);
-    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
-
-    const skip = (page - 1) * limit;
-
-    // Check if admin exists
-    const adminExists = await prisma.admin.findUnique({
-      where: { id: adminId },
-      select: { id: true },
-    });
-
-    if (!adminExists) {
-      return res.status(404).json({
-        status: "fail",
-        message: "Admin not found",
-      });
-    }
-
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        where: { adminId },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-            },
-          },
-          discount: {
-            select: {
-              id: true,
-              code: true,
-              percentage: true,
-              validTill: true,
-            },
-          },
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  name: true,
-                  price: true,
-                  imageUrl: true,
-                },
-              },
-            },
-          },
-          Invoice: {
-            select: {
-              id: true,
-              pdfUrl: true,
-              createdAt: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.order.count({ where: { adminId } }),
-    ]);
-
-    const enhancedOrders = orders.map((order) => {
-      const subtotal = order.items.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0
-      );
-
-      const discountAmount = order.discount
-        ? subtotal * (order.discount.percentage / 100)
-        : 0;
-
-      return {
-        ...order,
-        subtotal,
-        discount: order.discount
-          ? {
-              ...order.discount,
-              discountAmount,
-            }
-          : null,
-        total: subtotal - discountAmount,
-        itemCount: order.items.length,
-      };
-    });
-
-    res.status(200).json({
-      status: "success",
-      results: enhancedOrders.length,
-      data: enhancedOrders,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-export const getAdminDiscounts = asyncHandler(async (req, res, next) => {
-  try {
-    const { adminId } = adminIdParamSchema.parse(req.params);
-    const { page = 1, limit = 10 } = paginationSchema.parse(req.query);
-
-    const skip = (page - 1) * limit;
-
-    const [discounts, total] = await Promise.all([
-      prisma.discount.findMany({
-        where: {
-          users: {
-            some: {
-              adminId: adminId,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.discount.count({
-        where: {
-          users: {
-            some: {
-              adminId: adminId,
-            },
-          },
-        },
-      }),
-    ]);
-
-    res.json({
-      status: "success",
-      data: discounts,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
+  return successResponse(res, admin, "Admin profile fetched");
 });

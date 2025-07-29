@@ -9,14 +9,8 @@ import {
   updateAdmin,
   deleteAdmin,
   getAdminUsers,
-  getAdminProducts,
-  getAdminInventoryLogs,
-  getAdminReports,
-  getAdminInvoices,
-  getAdminInquiries,
-  getAdminSettings,
-  getAdminOrders,
-  getAdminDiscounts,
+  getAdminDashboardStats,
+  getAdminProfile,
 } from "../controllers/adminControllers.js";
 
 import {
@@ -41,7 +35,6 @@ import { Role } from "../generated/prisma/index.js";
 const adminRouter = express.Router();
 
 /* ----------------------------- Public Routes ----------------------------- */
-
 adminRouter.post(
   "/login-superadmin",
   validateRequest({ body: loginSchema }),
@@ -55,16 +48,28 @@ adminRouter.post(
 );
 
 /* ---------------------------- Protected Routes --------------------------- */
-
 adminRouter.use(authenticate, requireAuth(), checkAccountStatus);
 
+// Reusable validation middlewares
 const validatePagination = validateRequest({ query: paginationSchema });
 const validateAdminId = validateRequest({ params: adminIdParamSchema });
 const validateCreateAdmin = validateRequest({ body: adminCreateSchema });
 const validateUpdateAdmin = validateRequest({ body: adminUpdateSchema });
 
-/* ---------------------------- SUPERADMIN ONLY ---------------------------- */
+/* ---------------------------- Admin Profile Routes ---------------------------- */
+adminRouter.get(
+  "/profile",
+  checkRole([Role.ADMIN, Role.SUPERADMIN]),
+  asyncHandler(getAdminProfile)
+);
 
+adminRouter.get(
+  "/dashboard",
+  checkRole([Role.ADMIN, Role.SUPERADMIN]),
+  asyncHandler(getAdminDashboardStats)
+);
+
+/* ---------------------------- SUPERADMIN ONLY ---------------------------- */
 adminRouter.post(
   "/",
   checkRole([Role.SUPERADMIN]),
@@ -80,10 +85,9 @@ adminRouter.delete(
 );
 
 /* ---------------------- ADMIN + SUPERADMIN SHARED ROUTES ---------------------- */
-
 const sharedRoles = [Role.ADMIN, Role.SUPERADMIN];
 
-// ✅ Fetch all admins — /api/admin
+// Admin management
 adminRouter.get(
   "/",
   checkRole(sharedRoles),
@@ -91,7 +95,6 @@ adminRouter.get(
   asyncHandler(getAdmin)
 );
 
-// ✅ Fetch single admin by ID — /api/admin/:adminId
 adminRouter.get(
   "/:adminId",
   checkRole(sharedRoles),
@@ -107,75 +110,13 @@ adminRouter.put(
   asyncHandler(updateAdmin)
 );
 
+// Admin resource access
 adminRouter.get(
   "/:adminId/users",
   checkRole(sharedRoles),
   validateAdminId,
   validatePagination,
   asyncHandler(getAdminUsers)
-);
-
-adminRouter.get(
-  "/:adminId/products",
-  checkRole(sharedRoles),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminProducts)
-);
-
-adminRouter.get(
-  "/:adminId/inventory-logs",
-  checkRole(sharedRoles),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminInventoryLogs)
-);
-
-adminRouter.get(
-  "/:adminId/reports",
-  checkRole(sharedRoles),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminReports)
-);
-
-adminRouter.get(
-  "/:adminId/invoices",
-  checkRole(sharedRoles),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminInvoices)
-);
-
-adminRouter.get(
-  "/:adminId/inquiries",
-  checkRole(sharedRoles),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminInquiries)
-);
-
-adminRouter.get(
-  "/:adminId/settings",
-  checkRole(sharedRoles),
-  validateAdminId,
-  asyncHandler(getAdminSettings)
-);
-
-adminRouter.get(
-  "/:adminId/orders",
-  checkRole(sharedRoles),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminOrders)
-);
-
-adminRouter.get(
-  "/:adminId/discounts",
-  checkRole(sharedRoles),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminDiscounts)
 );
 
 export default adminRouter;
