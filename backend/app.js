@@ -7,14 +7,24 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import morgan from "morgan";
 import { errorHandler, notFoundHandler } from "./middleware/errorMiddleware.js";
-import userRoutes from "./routes/userRoutes.js";
-import adminRoutes from "./routes/adminRoutes.js";
 import Initrouter from "./routes/initRoutes.js";
+import adminRouter from "./routes/adminRoutes.js";
+import userRouter from "./routes/userRoutes.js";
+import cartRouter from "./routes/cartRoutes.js";
+import inventoryRouter from "./routes/inventoryRoutes.js";
+import productRouter from "./routes/productRoute.js";
+import orderRouter from "./routes/orderRoutes.js";
+import wishlistRouter from "./routes/wishlistRoutes.js";
+import settingsRouter from "./routes/settingsRoutes.js";
+import dashboardRouter from "./routes/dashboardRoutes.js";
+import reviewRouter from "./routes/reviewRoutes.js";
+import discountRouter from "./routes/discountRoutes.js";
 
 // Config initialization
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../.env.production") });
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -65,9 +75,18 @@ app.get("/health", (req, res) => {
 });
 
 // API Routes
-app.use("/api/users", userRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/init", Initrouter); // ✅ BOOTSTRAP SUPERADMIN ROUTE
+app.use("/api/users", userRouter);
+app.use("/api/admin", adminRouter);
+app.use("/api/init", Initrouter);
+app.use("/api/inventory", inventoryRouter);
+app.use("/api/cart", cartRouter);
+app.use("/api/product", productRouter);
+app.use("/api/order", orderRouter);
+app.use("/api/wishlist", wishlistRouter);
+app.use("/api/settings", settingsRouter);
+app.use("/api/dashboard", dashboardRouter);
+app.use("/api/reviews", reviewRouter);
+app.use("/api/discount", discountRouter);
 
 // Error handling
 app.use(notFoundHandler);

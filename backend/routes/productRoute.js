@@ -1,4 +1,3 @@
-// routes/productRoutes.js
 import express from "express";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import {
@@ -7,89 +6,67 @@ import {
   getProductById,
   updateProduct,
   deleteProduct,
-  getProductReviews,
-  getProductInventory,
-  updateProductInventory,
 } from "../controllers/productControllers.js";
 import {
   productCreateSchema,
   productUpdateSchema,
   productIdParamSchema,
-  inventoryUpdateSchema,
-  paginationSchema,
+  productQuerySchema,
 } from "../validations/product.validation.js";
 import { validateRequest } from "../middleware/validation.middleware.js";
 import {
   authenticate,
-  requireAuth,
-  requireAdmin,
-  requireRole,
   checkAccountStatus,
+  checkRole,
 } from "../middleware/authMiddleware.js";
+import { Role } from "../generated/prisma/index.js";
+import {
+  discountCreateSchema,
+  discountUpdateSchema,
+} from "../validations/discount.validation.js";
 
 const productRouter = express.Router();
 
-// Validation middleware
-const validatePagination = validateRequest({ query: paginationSchema });
+// Pre-validated middleware
 const validateProductId = validateRequest({ params: productIdParamSchema });
-const validateCreateProduct = validateRequest({ body: productCreateSchema });
-const validateUpdateProduct = validateRequest({ body: productUpdateSchema });
-const validateInventoryUpdate = validateRequest({
-  body: inventoryUpdateSchema,
-});
+const validateCreate = validateRequest({ body: productCreateSchema });
+const validateUpdate = validateRequest({ body: productUpdateSchema });
+const validateProductQuery = validateRequest({ query: productQuerySchema });
 
-// Public routes (no authentication required)
-productRouter.get("/", validatePagination, asyncHandler(getProducts));
+//───────────────────────────────────────────────────
+// Public Routes (No Authentication Required)
+//───────────────────────────────────────────────────
+productRouter.get("/", validateProductQuery, asyncHandler(getProducts));
 productRouter.get(
   "/:productId",
   validateProductId,
   asyncHandler(getProductById)
 );
-productRouter.get(
-  "/:productId/reviews",
-  validateProductId,
-  validatePagination,
-  asyncHandler(getProductReviews)
-);
 
-// Authenticated routes
-productRouter.use(authenticate);
+//───────────────────────────────────────────────────
+// Authenticated Routes (All Below Require Auth)
+//───────────────────────────────────────────────────
+productRouter.use(authenticate, checkAccountStatus);
 
-// Inventory routes (admin/managers only)
-productRouter.get(
-  "/:productId/inventory",
-  requireRole("SUPERADMIN", "MANAGER"),
-  validateProductId,
-  asyncHandler(getProductInventory)
-);
-
-productRouter.put(
-  "/:productId/inventory",
-  requireRole("SUPERADMIN", "MANAGER"),
-  validateProductId,
-  validateInventoryUpdate,
-  asyncHandler(updateProductInventory)
-);
-
-// Admin-only product management routes
+// Admin-only routes
 productRouter.post(
   "/",
-  requireAdmin,
-  validateCreateProduct,
+  checkRole([Role.ADMIN, Role.SUPERADMIN]),
+  validateCreate,
   asyncHandler(createProduct)
 );
 
 productRouter.put(
   "/:productId",
-  requireAdmin,
+  checkRole([Role.ADMIN, Role.SUPERADMIN]),
   validateProductId,
-  validateUpdateProduct,
+  validateUpdate,
   asyncHandler(updateProduct)
 );
 
 productRouter.delete(
   "/:productId",
-  requireRole("SUPERADMIN"), // Only superadmin can delete products
+  checkRole([Role.ADMIN, Role.SUPERADMIN]),
   validateProductId,
   asyncHandler(deleteProduct)
 );

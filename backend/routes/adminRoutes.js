@@ -4,18 +4,13 @@ import {
   loginSuperAdmin,
   loginAdmin,
   getAdmin,
+  getAdminById,
   createAdmin,
   updateAdmin,
   deleteAdmin,
   getAdminUsers,
-  getAdminProducts,
-  getAdminInventoryLogs,
-  getAdminReports,
-  getAdminInvoices,
-  getAdminInquiries,
-  getAdminSettings,
-  getAdminOrders,
-  getAdminDiscounts,
+  getAdminDashboardStats,
+  getAdminProfile,
 } from "../controllers/adminControllers.js";
 
 import {
@@ -28,19 +23,18 @@ import {
   authenticate,
   requireAuth,
   checkAccountStatus,
+  checkRole,
 } from "../middleware/authMiddleware.js";
-
 import {
   paginationSchema,
   loginSchema,
 } from "../validations/common.validation.js";
-import { checkRole } from "../middleware/authMiddleware.js";
+
 import { Role } from "../generated/prisma/index.js";
 
 const adminRouter = express.Router();
 
-// Unprotected
-
+/* ----------------------------- Public Routes ----------------------------- */
 adminRouter.post(
   "/login-superadmin",
   validateRequest({ body: loginSchema }),
@@ -53,22 +47,36 @@ adminRouter.post(
   asyncHandler(loginAdmin)
 );
 
-// Protect all below routes
-adminRouter.use(authenticate, requireAuth, checkAccountStatus);
+/* ---------------------------- Protected Routes --------------------------- */
+adminRouter.use(authenticate, requireAuth(), checkAccountStatus);
 
+// Reusable validation middlewares
 const validatePagination = validateRequest({ query: paginationSchema });
 const validateAdminId = validateRequest({ params: adminIdParamSchema });
 const validateCreateAdmin = validateRequest({ body: adminCreateSchema });
 const validateUpdateAdmin = validateRequest({ body: adminUpdateSchema });
 
-// 🔒 SUPERADMIN ONLY
+/* ---------------------------- Admin Profile Routes ---------------------------- */
+adminRouter.get(
+  "/profile",
+  checkRole([Role.ADMIN, Role.SUPERADMIN]),
+  asyncHandler(getAdminProfile)
+);
 
+adminRouter.get(
+  "/dashboard",
+  checkRole([Role.ADMIN, Role.SUPERADMIN]),
+  asyncHandler(getAdminDashboardStats)
+);
+
+/* ---------------------------- SUPERADMIN ONLY ---------------------------- */
 adminRouter.post(
   "/",
   checkRole([Role.SUPERADMIN]),
   validateCreateAdmin,
   asyncHandler(createAdmin)
 );
+
 adminRouter.delete(
   "/:adminId",
   checkRole([Role.SUPERADMIN]),
@@ -76,82 +84,39 @@ adminRouter.delete(
   asyncHandler(deleteAdmin)
 );
 
-// 🔒 SUPERADMIN + ADMIN (self-based enforcement can be added in controller logic)
+/* ---------------------- ADMIN + SUPERADMIN SHARED ROUTES ---------------------- */
+const sharedRoles = [Role.ADMIN, Role.SUPERADMIN];
+
+// Admin management
 adminRouter.get(
-  "/:adminId",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
-  validateAdminId,
+  "/",
+  checkRole(sharedRoles),
+  validatePagination,
   asyncHandler(getAdmin)
 );
+
+adminRouter.get(
+  "/:adminId",
+  checkRole(sharedRoles),
+  validateAdminId,
+  asyncHandler(getAdminById)
+);
+
 adminRouter.put(
   "/:adminId",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
+  checkRole(sharedRoles),
   validateAdminId,
   validateUpdateAdmin,
   asyncHandler(updateAdmin)
 );
 
+// Admin resource access
 adminRouter.get(
   "/:adminId/users",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
+  checkRole(sharedRoles),
   validateAdminId,
   validatePagination,
   asyncHandler(getAdminUsers)
-);
-adminRouter.get(
-  "/:adminId/products",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminProducts)
-);
-adminRouter.get(
-  "/:adminId/inventory-logs",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminInventoryLogs)
-);
-adminRouter.get(
-  "/:adminId/reports",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminReports)
-);
-adminRouter.get(
-  "/:adminId/invoices",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminInvoices)
-);
-adminRouter.get(
-  "/:adminId/inquiries",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminInquiries)
-);
-adminRouter.get(
-  "/:adminId/settings",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
-  validateAdminId,
-  asyncHandler(getAdminSettings)
-);
-adminRouter.get(
-  "/:adminId/orders",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminOrders)
-);
-adminRouter.get(
-  "/:adminId/discounts",
-  checkRole([Role.SUPERADMIN, Role.ADMIN]),
-  validateAdminId,
-  validatePagination,
-  asyncHandler(getAdminDiscounts)
 );
 
 export default adminRouter;
