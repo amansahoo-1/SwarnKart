@@ -24,6 +24,7 @@ import discountRouter from "./routes/discountRoutes.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
+dotenv.config({ path: path.resolve(__dirname, "../.env.production") });
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);

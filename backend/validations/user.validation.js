@@ -17,6 +17,7 @@ export const userCreateSchema = z.object({
   address: z.string().optional(),
   preferences: z.record(z.any()).optional(),
   adminId: idSchema.optional(),
+  avatarUrl: urlSchema.optional(),
 });
 
 export const userUpdateSchema = z

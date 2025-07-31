@@ -66,9 +66,6 @@ export const loginSuperAdmin = asyncHandler(async (req, res) => {
 });
 
 // ✅ Admin Login
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOCK_TIME = 15 * 60 * 1000; // 15 minutes
-
 export const loginAdmin = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
@@ -79,48 +76,21 @@ export const loginAdmin = asyncHandler(async (req, res) => {
     return errorResponse(res, "Invalid credentials", 401);
   }
 
-  // Check if account is locked
-  if (
-    admin.loginAttempts >= MAX_LOGIN_ATTEMPTS &&
-    new Date(admin.lastLoginAttempt) > new Date(Date.now() - LOCK_TIME)
-  ) {
-    return errorResponse(
-      res,
-      "Account temporarily locked. Try again later.",
-      423
-    );
-  }
-
+  // Validate password
   const isMatch = await comparePassword(password, admin.password);
 
   if (!isMatch) {
-    // Update failed login attempt
-    await prisma.admin.update({
-      where: { id: admin.id },
-      data: {
-        loginAttempts: { increment: 1 },
-        lastLoginAttempt: new Date(),
-      },
-    });
-
-    const attemptsLeft = MAX_LOGIN_ATTEMPTS - (admin.loginAttempts + 1);
-    const message =
-      attemptsLeft > 0
-        ? `Invalid credentials. ${attemptsLeft} attempts remaining.`
-        : "Account locked due to too many failed attempts. Try again later.";
-
-    return errorResponse(res, message, 401);
+    return errorResponse(res, "Invalid credentials", 401);
   }
 
-  // On successful login
+  // Generate JWT token
   const token = generateAdminToken({ id: admin.id, role: admin.role });
 
+  // Update last login timestamp
   await prisma.admin.update({
     where: { id: admin.id },
     data: {
       lastLoginAt: new Date(),
-      loginAttempts: 0, // Reset attempts on successful login
-      lastLoginAttempt: null,
     },
   });
 
@@ -139,7 +109,6 @@ export const loginAdmin = asyncHandler(async (req, res) => {
     "Login successful"
   );
 });
-
 // ✅ Get all admins (paginated)
 export const getAdmin = asyncHandler(async (req, res) => {
   const {
@@ -224,11 +193,8 @@ export const createAdmin = asyncHandler(async (req, res) => {
 
 // ✅ Update admin (with validation)
 export const updateAdmin = asyncHandler(async (req, res) => {
-  // Validate route param
-  const { id } = adminIdParamSchema.parse(req.params);
-
-  // Validate body
-  const data = adminUpdateSchema.parse(req.body);
+  const id = req.validated.params.adminId; // Already validated by Zod middleware
+  const data = req.validated.body; // Already validated by `validateUpdateAdmin`
 
   const existing = await prisma.admin.findUnique({ where: { id } });
 

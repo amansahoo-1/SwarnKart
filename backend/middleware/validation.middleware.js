@@ -4,18 +4,26 @@ import { ZodError } from "zod";
 export const validateRequest = (schemas) => {
   return (req, res, next) => {
     try {
-      req.validated = {}; // ⬅️ centralized place to store all validated data
+      req.validated ??= {}; // ✅ Preserve previous validations
+      // ⬅️ centralized place to store all validated data
 
       if (schemas.params) {
-        req.validated.params = schemas.params.parse(req.params);
+        req.validated.params = {
+          ...(req.validated.params ?? {}),
+          ...schemas.params.parse(req.params),
+        };
       }
-
       if (schemas.query) {
-        req.validated.query = schemas.query.parse(req.query);
+        req.validated.query = {
+          ...(req.validated.query ?? {}),
+          ...schemas.query.parse(req.query),
+        };
       }
-
       if (schemas.body) {
-        req.validated.body = schemas.body.parse(req.body);
+        req.validated.body = {
+          ...(req.validated.body ?? {}),
+          ...schemas.body.parse(req.body),
+        };
       }
 
       next();
